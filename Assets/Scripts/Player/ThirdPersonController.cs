@@ -1,5 +1,6 @@
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody))]
 public class ThirdPersonController : MonoBehaviour
 {
     public float moveSpeed = 5f; // Скорость движения
@@ -8,42 +9,52 @@ public class ThirdPersonController : MonoBehaviour
     public KeyCode jumpKey = KeyCode.Space; // Клавиша для прыжка
     public KeyCode sprintKey = KeyCode.LeftShift; // Клавиша для ускорения
 
-    private CharacterController controller;
-    private Vector3 velocity;
+    private Rigidbody rb;
     private bool isGrounded;
 
     private void Start()
     {
-        controller = GetComponent<CharacterController>();
+        rb = GetComponent<Rigidbody>();
+        rb.freezeRotation = true; // Запрещаем вращение под действием физики
     }
 
     private void Update()
     {
-        isGrounded = controller.isGrounded;
-
-        if (isGrounded && velocity.y < 0)
-        {
-            velocity.y = 0; // Сбрасываем вертикальную скорость, если на земле
-        }
+        // Проверка на земле
+        isGrounded = Physics.Raycast(transform.position, Vector3.down, 1.1f); // Проверяем, находится ли персонаж на земле
 
         // Получаем входные данные
         float moveHorizontal = Input.GetAxis("Horizontal");
         float moveVertical = Input.GetAxis("Vertical");
 
-        // Определяем скорость движения
-        Vector3 move = transform.right * moveHorizontal + transform.forward * moveVertical;
+        // Получаем направление камеры
+        Vector3 forward = Camera.main.transform.forward;
+        Vector3 right = Camera.main.transform.right;
+
+        // Убираем вертикальную составляющую направления
+        forward.y = 0;
+        right.y = 0;
+
+        forward.Normalize();
+        right.Normalize();
+
+        // Определяем движение
+        Vector3 move = (forward * moveVertical + right * moveHorizontal).normalized;
         float currentSpeed = Input.GetKey(sprintKey) ? sprintSpeed : moveSpeed;
 
-        controller.Move(move * currentSpeed * Time.deltaTime);
+        // Двигаем персонажа
+        if (move.magnitude > 0)
+        {
+            rb.MovePosition(rb.position + move * currentSpeed * Time.deltaTime);
+            // Поворачиваем персонажа в сторону движения
+            Quaternion targetRotation = Quaternion.LookRotation(move);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f); // Плавный поворот
+        }
 
         // Прыжок
         if (Input.GetKeyDown(jumpKey) && isGrounded)
         {
-            velocity.y += Mathf.Sqrt(jumpForce * -2f * Physics.gravity.y);
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse); // Применяем силу прыжка
         }
-
-        // Применяем гравитацию
-        velocity.y += Physics.gravity.y * Time.deltaTime;
-        controller.Move(velocity * Time.deltaTime);
     }
 }
